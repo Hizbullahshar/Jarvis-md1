@@ -9,23 +9,17 @@ Jarvis - Loki-Xer
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
+
 const {
     Vote,
     isUrl,
     sleep,
     System,
-    isAdmin,
     isPrivate,
-    parsedJid,
     warnMessage,
     extractUrlFromMessage,
 } = require("../lib/");
-
-const isBotAdmins = async (message) => {
-	const groupMetadata = await message.client.groupMetadata(message.chat)
-	const admins = await groupMetadata.participants.filter(v => v.admin !== null).map(v => v.id)
-	return admins.includes(message.user_id)
-}
+const { parsedJid, isAdmin, isBotAdmins, getAllGroups } = require("./client/");
 
 System({
     pattern: 'add ?(.*)',
@@ -34,28 +28,28 @@ System({
     desc: "add a person to group"
 }, async (message, match) => {
     if (!message.isGroup) return;
-    match = message.reply_message.sender || match;
+    match = message.reply_message?.sender || match;
     let isadmin = await isAdmin(message, message.user.jid);
     if (!isadmin) return await message.send("_I'm not admin_");
-    if (!match) return await message.send("_Mention user to add");
+    if (!match) return await message.send("_Mention user to add_");
     match = match.replaceAll(' ', '');
     if (match) {
         let users = match.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
         let info = await message.client.onWhatsApp(users);
-        ex = info.map((jid) => jid.jid);
+        let ex = info.map((jid) => jid.jid);
         if (!ex.includes(users)) return await message.reply('h');
         const su = await message.client.groupParticipantsUpdate(message.jid, [users], "add");
         if (su[0].status == 403) {
-            await message.reply("_Couldn\'t add. Invite sent!_");
+            await message.reply("_Couldn't add. Invite sent!_");
             return await message.sendGroupInviteMessage(users);
         } else if (su[0].status == 408) {
-            await message.send(`Couldn\'t add @${users.split("@")[0]} because they left the group recently. group Invitation sent!`, {
+            await message.send(`Couldn't add @${users.split("@")[0]} because they left the group recently. Group invitation sent!`, {
                 mentions: [users]
             });
             const code = await message.client.groupInviteCode(message.jid);
-            return await message.client.sendMessage(users, { text: `https://chat.whatsapp.com/${code}` }); 
+            return await message.client.sendMessage(users, { text: `https://chat.whatsapp.com/${code}` });
         } else if (su[0].status == 401) {
-            return await message.send(`Couldn\'t add @${users.split("@")[0]} because they blocked the bot number.`, {
+            return await message.send(`Couldn't add @${users.split("@")[0]} because they blocked the bot number.`, {
                 mentions: [users]
             });
         } else if (su[0].status == 200) {
@@ -219,24 +213,24 @@ System({
     }
 });
 
-
-
 System({
-	pattern: "gpp$",
-	fromMe: true,
-	desc: "Set full-screen profile picture",
-	type: "group",
-}, async (message) => {
-    if (!message.isGroup) { return await message.send("_This command is for groups_"); }
+    pattern: "gpp$",
+    fromMe: true,
+    desc: "Set full-screen profile picture",
+    type: "group",
+}, async (message, match) => {
+    if (!message.isGroup) return await message.send("_This command is for groups_"); 
     let isadmin = await isAdmin(message, message.user.jid);
-    if (!isadmin) { return await message.send("_I'm not an admin_"); }
-    if (!message.reply_message.image) { return await message.send("_Reply to a photo_"); }
-    try { const media = await message.reply_message.download();
+    if (!isadmin) return await message.send("_I'm not an admin_");
+    if(match && match === "remove") {
+        await message.client.removeProfilePicture(message.jid);
+        return await message.reply("_Group Profile Picture Removed_");
+    }
+    if (!message.reply_message?.image) return await message.send("_Reply to a photo_");
+    const media = await message.reply_message.download();
     await message.client.updateProfile(media, message.jid);
-    return await message.send("_Group Profile Picture Updated_"); } catch (error) {
-    console.error("Error updating profile picture:", error);
-    return await message.send("_Failed to update profile picture_");
-}});
+    return await message.send("_Group Profile Picture Updated_");
+});
 
 System({
     pattern: 'revoke ?(.*)',
@@ -362,15 +356,17 @@ System({
     fromMe: true,
     desc: "To get group jid",
     type: 'group'
-}, async (message, match, client) => {
-    match = match || message.reply_message.text
-    if (!message.isGroup) return await message.reply("_This command is for groups_");
-    let { participants } = await message.client.groupMetadata(message.jid);
-    let participant = participants.map((u) => u.id);
-    let str = " *Group Jids* \n\n";
-    participant.forEach((result) => { str += ` ${result}\n`; });
-    await message.reply(str);
+}, async (message, match) => {
+    match = match || message.reply_message.text;
+    if (!message.isGroup || match === "info") return message.send(`*All Group Jid*\n${await getAllGroups(message.client)}`);    
+    if (match === "participants jid") {
+        const { participants, subject } = await message.client.groupMetadata(message.jid);
+        const participantJids = participants.map(u => u.id).join("\n\n")
+        return message.reply(`*Group Participants Jid*\n\n*Group Name:* ${subject}\n*All Participants Jid*\n\n${participantJids}`);
+    }
+    await message.send([ { name: "quick_reply", display_text: "All Group Info", id: "gjid info" }, { name: "quick_reply", display_text: "Group Participants Jid", id: "gjid participants jid" } ], { body: "", footer: "*JARVIS-MD*", title: "*Group Jid Info 🎏*\n" }, "button");
 });
+
 
 System({
     pattern: 'ginfo ?(.*)',
@@ -413,7 +409,8 @@ System({
 	if(!isBotAdmin) return await message.send("_I'm not admin_");
 	let userIsAdmin = await isAdmin(message, user);
 	if(userIsAdmin) return await message.client.sendMessage(message.chat, { text: `_user is admin @${jid[0].split("@")[0]}_`, mentions: jid });
-        await warnMessage(message, match, user)
+	const name = await message.store.getName(user);
+        await warnMessage(message, match, user, name);
 });
 
 System({
@@ -423,7 +420,7 @@ System({
     type: "group",
 }, async (message, match) => {
     if (!message.isGroup) return message.reply("_*This command is for groups only.*_");
-    const data = await message.groupStatus("disactive");
+    const data = await message.store.groupStatus(message.chat, "disactive");
     let inactiveUsers = Array.isArray(data) ? `*Total Inactive Users ${data.length}*\n\n` + data.map((item, index) => `*${index + 1}. User: @${item.jid.split("@")[0]}*\n*Role: ${item.role}*\n\n`).join("") : "_*No inactive users found.*_";
     return await message.send(inactiveUsers.trim(), { mentions: data.map(a => a.jid) || [] });
 });
@@ -435,7 +432,7 @@ System({
     type: "group",
 }, async (message, match) => {
     if (!message.isGroup) return message.reply("_*This command is for groups only.*_");
-    const data = await message.groupStatus("active");
+    const data = await message.store.groupStatus(message.jid, "active");
     let activeUsers = Array.isArray(data) ? `*Total Active Users ${data.length}*\n\n` + data.map(item => `*Name: ${item.pushName}*\n*Number: ${item.jid.split("@")[0]}*\n*Total Messages: ${item.messageCount}*\n\n`).join("") : "_*No active users found.*_";
     return await message.send([{ name: "quick_reply", display_text: "Inactive users", id: "inactive" }], { body: "", footer: "\n*JARVIS-MD*", title: activeUsers.trim() }, "button");
 });

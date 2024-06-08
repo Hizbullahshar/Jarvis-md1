@@ -2,17 +2,28 @@ const { System, IronMan, isPrivate, getJson } = require("../lib/");
 
 
 System({
-        pattern: "ig ?(.*)",
-        fromMe: isPrivate,
-        desc: "Get details of Instagram id",
-        type: "search"
+    pattern: 'ig ?(.*)',
+    fromMe: isPrivate,
+    desc: 'Instagram profile details',
+    type: 'search',
 }, async (message, match) => {
-        match = match.trim();
-        if (!match) return await message.send("*Need an Instagram username*\n_Example: .ig sedboy.am_");
-        const { result } = await getJson(await IronMan(`ironman/ig?name=${match}`));
-        const { username, full_name: fullName, biography, profile_pic_url: profilePic, posts: postCount, followers: followersCount, following: followingCount, is_verified: isVerified, is_private: isPrivate, external_url: profileUrl } = result.user_info;
-        const caption = `*𖢈Username: ${username}*\n*𖢈Name: ${fullName}*\n*𖢈Bio: ${biography}*\n*𖢈Post: ${postCount}*\n*𖢈Followers: ${followersCount}*\n*𖢈Following: ${followingCount}*\n*𖢈Verified: ${isVerified}*\n*𖢈Private: ${isPrivate}*\n*𖢈URL: https://instagram.com/${match}*`;
-        await message.client.sendMessage(message.chat, { image: { url: `${profilePic}` }, caption: caption });
+    if (!match) return await message.send("*Need a username*\n_Example: .ig sedboy.am_");
+    const data = await getJson(IronMan(`ironman/igstalk?id=${match}`));
+    let caption = '';
+    if (data.name) caption += `*𖢈ɴᴀᴍᴇ:* ${data.name}\n`;
+    if (data.username) caption += `*𖢈ᴜꜱᴇʀɴᴀᴍᴇ:* ${data.username}\n`;
+    if (data.bio) caption += `*𖢈ʙɪᴏ:* ${data.bio}\n`;
+    if (data.pronouns && data.pronouns.length > 0) caption += `*𖢈ᴘʀᴏɴᴏᴜɴꜱ:* ${data.pronouns.join(', ')}\n`;
+    if (data.followers) caption += `*𖢈ꜰᴏʟʟᴏᴡᴇʀꜱ:* ${data.followers}\n`;
+    if (data.following) caption += `*𖢈ꜰᴏʟʟᴏᴡɪɴɢ:* ${data.following}\n`;
+    if (data.category) caption += `*𖢈ᴄᴀᴛᴇɢᴏʀʏ:* ${data.category}\n`;
+    if (typeof data.private !== 'undefined') caption += `*𖢈ᴘʀɪᴠᴀᴛᴇ ᴀᴄᴄ:* ${data.private}\n`;
+    if (typeof data.business !== 'undefined') caption += `*𖢈ʙᴜꜱꜱɪɴᴇꜱ ᴀᴄᴄ:* ${data.business}\n`;
+    if (data.email) caption += `*𖢈ᴇᴍᴀɪʟ:* ${data.email}\n`;
+    if (data.url) caption += `*𖢈ᴜʀʟ:* ${data.url}\n`;
+    if (data.contact) caption += `*𖢈ɴᴜᴍʙᴇʀ:*${data.contact}\n`;
+    if (data.action_button) caption += `*𖢈ᴀᴄᴛɪᴏɴ ʙᴜᴛᴛᴏɴ:* ${data.action_button}\n`;
+    await message.client.sendMessage(message.chat, { image: { url: data.hdpfp }, caption: caption.trim() });
 });
 
 System({
@@ -100,16 +111,13 @@ System({
     desc: 'wallpaper search',
     type: 'search'
 }, async (message, match, m) => {
-    if (!match) return await message.send("*Need a wallpaper name*\n_Example: .wallpaper mountain_");
-    const query = match.trim(); 
-    const images = await getJson(await IronMan(`ironman/wallpaper?search=${query}`));
-    if (images.length > 0) {
-        const randomIndexes = Array.from({ length: 5 }, () => Math.floor(Math.random() * images.length));
-        const randomImages = randomIndexes.map(index => images[index]);
-        
-        for (const url of randomImages) {
-            await message.client.sendMessage(message.chat, { image: { url }, caption: "" });
-            await new Promise(resolve => setTimeout(resolve, 1000));
+    if (!match) return await message.send("*Need a wallpaper name*\n_Example: .wallpaper furina_");
+    const images = await getJson(IronMan(`ironman/wallpaper/wlhven?name=${encodeURIComponent(match)}`));
+    const urls = images.filter(item => item.url).map(item => item.url);
+    if (urls.length > 0) {
+        const selectedUrls = urls.sort(() => 0.5 - Math.random()).slice(0, 5);
+        for (const imageUrl of selectedUrls) {
+            await message.client.sendMessage(message.chat, { image: { url: imageUrl }, caption: "" });
         }
     } else {
         await message.send("No wallpapers found for the given query.");
@@ -117,29 +125,23 @@ System({
 });
 
 System({
-    pattern: "img",
-    fromMe: isPrivate,
-    desc: "to search Google images",
-    type: "search",
+  pattern: 'img ?(.*)',
+  fromMe: isPrivate,
+  desc: 'Search google images',
+  type: 'search',
 }, async (message, match) => {
-    match = match || message.reply_message.text;
-    if (!match) return await message.reply("_Invalid command format. Please use e.g.: iron man,10_");
-    let [searchTerm, numberOfImages] = match.split(',').map(part => part.trim());
-    numberOfImages = numberOfImages ? (isNaN(numberOfImages) || numberOfImages < 1 || numberOfImages > 10 ? 5 : parseInt(numberOfImages)) : 5;
-    const encodedSearchTerm = encodeURIComponent(searchTerm);
-    const data = await getJson(await IronMan(`ironman/s/google?image=${encodedSearchTerm}`));
-    const urlsToSend = data.map(item => item.url);
-    const send = await message.send(`_Downloading ${numberOfImages} images of ${searchTerm}_`);
-    for (const imageUrl of urlsToSend.slice(0, numberOfImages)) {
-        try {
-            await message.client.sendMessage(message.chat, {image: { url: imageUrl }});
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (imageError) {
-            console.error("Error with image:", imageError);
-            await send.edit("_Error in image_");
-        }
-    }
-    await send.edit("_Downloaded_");
+  const [query, count] = match.split(',').map(item => item.trim());
+  const imageCount = count ? parseInt(count, 10) : 5;
+  if (!query) return await message.send("*Need a Query*\n_Example: .img ironman, 5_");
+  const msg = await message.send(`Downloading ${imageCount} images of *${query}*`);
+  const urls = await getJson(IronMan(`ironman/s/google?image=${encodeURIComponent(query)}`));
+  if (urls.length === 0) return await message.send("No images found for the query");
+  const list = urls.length <= imageCount ? urls : urls.sort(() => 0.5 - Math.random()).slice(0, imageCount);
+  for (const url of list) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await message.client.sendMessage(message.chat, { image: { url }, caption: "" });
+  }
+  await msg.edit("*Downloaded*");
 });
 
 System({
@@ -153,4 +155,25 @@ System({
     const GhUserPP = data.avatar_url || "https://graph.org/file/924bcf22ea2aab5208489.jpg";
     const userInfo = `\n⎔ *Username* : ${data.login} \n⎔ *Name* : ${data.name || "Not Available"} \n⎔ *Bio* : ${data.bio || "Not Available"} \n\n➭ *ID* : ${data.id}\n➭ *Followers* : ${data.followers}\n➭ *Following* : ${data.following}\n➭ *Type* : ${data.type}\n➭ *Company* : ${data.company || "Not Available"}\n➭ *Public Repos* : ${data.public_repos}\n➭ *Public Gists* : ${data.public_gists}\n➭ *Email* : ${data.email || "Not Available"}\n➭ *Twitter* : ${data.twitter_username || "Not Available"}\n➭ *Location* : ${data.location || "Not Available"}\n➭ *Blog* : ${data.blog || "Not Available"}\n➭ *Profile URL* : ${data.html_url}\n➭ *Created At* : ${data.created_at}\n\n`;
     await message.client.sendMessage(message.chat, { image: { url: GhUserPP }, caption: userInfo });
+});
+
+
+System({
+    pattern: "dict", 
+    fromMe: isPrivate,
+    desc: "to search in dictionary", 
+    type: "search",
+}, async (msg, text) => {
+    if (!text) return await msg.reply('*Please enter any word!*');
+    await getJson('https://api.dictionaryapi.dev/api/v2/entries/en/' + text)
+     .then(async (data) => {
+      let word = data[0].word;
+      let phonetics = data[0].phonetics[0].text;
+      let partsOfSpeech = data[0].meanings[0].partOfSpeech;
+      let definition = data[0].meanings[0].definitions[0].definition;
+      let example = (data[0].meanings[0].definitions.find(obj => 'example' in obj) || {})['example'];
+      return await msg.reply(`_Word_ : *${word}*\n_Parts of speech_ : *${partsOfSpeech}*\n_Definition_ :\n*${definition}*${example == undefined ? `` : `\n_Example_ : *${example}*`}`.trim() );
+    }).catch(async (e) => {
+      return await msg.reply('*Unable to find definition for ' + text + '!*');
+    });
 });

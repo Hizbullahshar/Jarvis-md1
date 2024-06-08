@@ -11,7 +11,7 @@ Jarvis - Loki-Xer
 
 const Heroku = require("heroku-client");
 const { version } = require("../package.json");
-const { System, isPrivate, sleep } = require("../lib/");
+const { System, isPrivate, sleep, shell } = require("../lib/");
 const Config = require("../config");
 const { SUDO } = require("../config");
 const heroku = new Heroku({ token: Config.HEROKU_API_KEY });
@@ -25,16 +25,10 @@ System({
     pattern: "shutdown",
     fromMe: true,
     type: "server",
-    desc: "Heroku Dyno off",
+    desc: "shutdown bot",
 }, async (message) => {
-    const server = message.client.server;
-    if (server !== "HEROKU") return await message.reply("_shutdown only works in Heroku_");    
-    await heroku.get(baseURI + "/formation").then(async (formation) => {
     await message.send(`_Jarvis is shutting down..._`);
-    await heroku.patch(baseURI + "/formation/" + formation[0].id, { body: { quantity: 0 }, });
-    }).catch(async (error) => {
-        await message.send(`HEROKU: ${error.body.message}`);
-    });
+    return await shell("npm stop");
 });
 
 System({
@@ -48,19 +42,22 @@ System({
     const key = match.slice(0, match.indexOf(':')).trim();
     const value = match.slice(match.indexOf(':') + 1).trim();
     if (!key || !value) return await message.send(`_*Example: .setvar SUDO:917025673121*_`); 
-    if (server !== "HEROKU") return await message.reply("_setvar only works in Heroku or Koye_");
-   
+    if (server !== "HEROKU") return await message.reply("_setvar only works in Heroku_");
+    await message.send(`_*updated var ${key.toUpperCase()}: ${value}*`);
     heroku.patch(baseURI + "/config-vars", {
         body: {
             [key.toUpperCase()]: value,
         },
     })
-    .then(async () => {
-        await message.send(`_*updated var ${key.toUpperCase()}: ${value}*`);
-    })
-    .catch(async (error) => {
-        await message.send(`_HEROKU: ${error.body.message}_`);
-    });
+});
+
+System({
+    pattern: "platform",
+    fromMe: true,
+    type: "server",
+    desc: "Show which platform you delpoyed",
+}, async (m, match) => {
+    m.reply("_*" + "You ara delpoyed on " + m.client.server + "*_");
 });
 
 System({
@@ -75,12 +72,12 @@ System({
         .then(async (vars) => {
             const key = match.trim().toUpperCase();
             if (vars[key]) {
+                await message.send(`_Deleted ${key}_`);
                 await heroku.patch(baseURI + "/config-vars", {
                     body: {
                         [key]: null,
                     },
                 });
-                await message.send(`_Deleted ${key}_`);
             } else {
                 await message.send(`_${key} not found_`);
             }
@@ -144,21 +141,34 @@ System({
     desc: "set sudo", 
     type: "server" 
 }, async (message, match, m) => { 
-    const server = message.client.server;
     const newSudo = (message.mention[0] || message.reply_message.sender).split("@")[0];    
     if (!newSudo) return await m.reply("*reply to a number*");
     let setSudo = (Config.SUDO + "," + newSudo).replace(/,,/g, ",");
     setSudo = setSudo.startsWith(",") ? setSudo.replace(",", "") : setSudo;   
-    if (server !== "HEROKU") return await message.send("setsudo only works in Heroku");   
-    await heroku.patch(baseURI + "/config-vars", { body: { SUDO: setSudo } })
-        .then(async () => {
-            await message.reply("*new sudo numbers are :* " + setSudo);
-            await message.reply("_It takes 30 seconds to take effect_");
-        })
-        .catch(async (error) => {
-            console.error("Error setting sudo:", error);
-            await message.reply("An error occurred while setting sudo.");
-        });
+    if (message.client.server !== "HEROKU") return await message.send("setsudo only works in Heroku");
+    await message.reply("*new sudo numbers are :* " + setSudo);
+    await message.reply("_It takes 30 seconds to take effect_");
+    await heroku.patch(baseURI + "/config-vars", { body: { SUDO: setSudo } });
+});
+
+System({
+  pattern: "delsudo?(.*)",
+  fromMe: true,
+  desc: "delete sudo sudo",
+  type: "user",
+}, async (m, text) => {
+  if (m.client.server !== "HEROKU") return await message.send("setsudo only works in Heroku");
+  let sudoNumber = m.quoted? m.reply_message.sender : text;
+  sudoNumber = sudoNumber.split("@")[0];
+  if (!sudoNumber) return await m.send("*Need reply/mention/number*");
+  let sudoList = Config.SUDO.split(",");
+  sudoList = sudoList.filter((number) => number!== sudoNumber);
+  let newSudoList = sudoList.join(",");
+  await m.send(`NEW SUDO NUMBERS ARE: \n\`\`\`${newSudoList}\`\`\``, { quoted: m.data });
+  await m.send("_IT TAKES 30 SECONDS TO MAKE EFFECT_", { quoted: m });
+  await heroku
+   .patch(baseURI + "/config-vars", { body: { SUDO: newSudoList } })
+   .then(async (app) => {});
 });
 
 System({

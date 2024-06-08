@@ -1,4 +1,4 @@
-const { System, isPrivate, extractUrlFromMessage, sleep, getJson, config, isUrl, IronMan, getBuffer, toAudio } = require("../lib/");
+const { System, isPrivate, extractUrlFromMessage, sleep, getJson, config, isUrl, IronMan, getBuffer, toAudio, terabox } = require("../lib/");
 
 
 const fetchData = async (mediafireUrl) => {
@@ -200,4 +200,63 @@ System ({
    const msg = await message.send("_*Downloading 🪲*_", { quoted: message.data });
    await message.client.sendMessage(message.chat,{ document :{ url: `https://api.github.com/repos/${user}/${repo}/zipball` }, fileName: repo , mimetype: "application/zip"}, {quoted: message });
    await msg.edit("_*downloaded 🍓*_");
+});
+
+System({
+    pattern: 'twitter ?(.*)',
+    fromMe: isPrivate,
+    desc: 'Download Twitter video',
+    type: 'download',
+}, async (message, match, m) => {
+    if (!match || !match.includes('x.com')) return await message.send("_Need a x(twitter) media url_");
+    const twitterVideoUrl = match.trim();
+    const { media } = await getJson(`https://api-ironman444ff.koyeb.app/ironman/dl/x?url=${encodeURIComponent(twitterVideoUrl)}`);
+    await m.sendFromUrl(media[0].url);
+});
+
+System({
+    pattern: 'thread ?(.*)',
+    fromMe: isPrivate,
+    desc: 'Download threads media',
+    type: 'download',
+}, async (message, match) => {
+    if (!match || !match.includes('threads')) return await message.send("_Need a threads media url_");
+    const encodedUrl = encodeURIComponent(match.trim());
+    const media = await getJson(IronMan(`ironman/dl/threads?url=${encodedUrl}`));
+    if (media.video) {
+        for (const videoUrl of media.video) {
+            await message.client.sendMessage(message.chat, { video: { url: videoUrl }, caption: "*Download🤍*" });
+        }
+    }
+    if (media.image) {
+        for (const imageUrl of media.image) {
+            await message.client.sendMessage(message.chat, { image: { url: imageUrl }, caption: "*Download🤍*" });
+        }
+    }
+});
+
+System({
+        pattern: "tbox", 
+        fromMe: isPrivate,
+        desc: "download terabox file", 
+        type: "download",
+  }, async (msg, match) => {
+       match = await extractUrlFromMessage(match || msg.reply_message.text);
+       if (!isUrl(match)) return msg.reply("*Reply to Terabox url or provide a Terabox url*");
+       if (!match || !match.includes("tera")) return msg.reply("*Reply to Terabox url or provide a Terabox url*");
+       const { Name: teraBoxFileName, Download, FastDL } = await terabox(match);
+       await msg.send(await getBuffer("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTdlDLWf101d_p6TaRNvymnAiPPVFZPfTML9dVbj3LD6LLf_mTvHPH5pJq5&s=10"), { type: "image", value: [{ name: "cta_url", display_text: "Download", url: Download, merchant_url: Download, action: "url", icon: "", style: "link" }, { name: "cta_url", display_text: "Fast DL", url: FastDL, merchant_url: FastDL, action: "url", icon: "", style: "link" }], body: "", footer: "*JARVIS-MD*", title: `\nTo download the terabox file click the link below if download link not wroked use Fast DL\n\nFile Name: ` + await decodeURI(teraBoxFileName) +`\n` }, "button");
+ });
+
+System({
+	pattern: 'tiktok ?(.*)',
+	fromMe: isPrivate,
+	desc: 'Sends TikTok video ',
+	type: 'download',
+}, async (message, match, msg) => {
+       match = await extractUrlFromMessage(match || message.reply_message.text);
+       if (!isUrl(match)) return message.reply("*Reply to Terabox url or provide a Terabox url*");
+       if (!match || !match.includes("tiktok")) return message.reply("*Reply to tiktok url or provide a tiktok url*");   
+       const { result } = await getJson(IronMan("ironman/dl/v2/tiktok?url=" + match), { headers: { 'ApiKey': 'IRON-M4N' } });
+       await message.reply({ url:result.video }, { caption: "*_download🤍_*"}, "video");
 });
