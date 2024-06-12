@@ -1,5 +1,5 @@
 const Heroku = require('heroku-client');
-const { changeVar } = require("../../lib/")
+const { changeVar, setData } = require("../../lib/")
 const Config = require('../../config');
 const heroku = new Heroku({ token: Config.HEROKU_API_KEY });
 const baseURI = `/apps/${Config.HEROKU_APP_NAME}`;
@@ -55,19 +55,27 @@ async function changeEnv(key, value) {
   }
 }
 
-async function setEnv(key, value, m) {
+async function setEnv(key, value) {
   try {
     const env = await changeVar(key, value);
     if (!env) {
-      return m.reply("*Error in changing variable*");
+      return "*Error in changing variable*";
     }
     await setData(key, value, !!value, "vars");
-    m.reply(`Environment variable ${key} set to ${value}`);
-    await require('pm2').restart('index.js');
+    return `Environment variable ${key} set to ${value}`;
   } catch (error) {
-    return m.reply(`*Error setting environment variable: ${error.message}*`);
+    return `*Error setting environment variable: ${error.message}*`;
   }
-}
+};
+
+async function herokuRestart(message) {
+  try {
+    await heroku.delete(baseURI + "/dynos");
+    return true;
+  } catch (error) {
+    return await message.send(`HEROKU : ${error.body.message}`);
+  }
+};
 
 
-module.exports = { setVar, changeEnv, setEnv };
+module.exports = { setVar, changeEnv, setEnv, herokuRestart };
